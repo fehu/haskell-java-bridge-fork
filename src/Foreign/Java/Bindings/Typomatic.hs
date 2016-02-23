@@ -27,7 +27,6 @@ import Foreign.Java.Bindings.JavaTypes
 import Control.Monad.State hiding (void)
 import qualified Control.Monad.State as State
 import Data.Functor.Identity
-import Data.Functor ((<$>))
 
 import Data.Generics
 
@@ -383,7 +382,7 @@ pushVar name = do
 
 -- | The monad.
 newtype Typomatic a = Typomatic { _runTypomatic :: StateT TypomaticState Identity a }
-    deriving (Monad, MonadState TypomaticState, Functor)
+    deriving (Monad, MonadState TypomaticState, Functor, Applicative)
 
 -- | Run a computation in the monad.
 runTypomatic :: Map String JavaClass -> Typomatic a -> a

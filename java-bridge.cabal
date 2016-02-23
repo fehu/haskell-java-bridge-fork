@@ -113,7 +113,7 @@ description:    This package offers bindings to the
                 >>> HACKING
                 .
                 See @HACKING.txt@ and @ISSUES.txt@ in the tar.gz-package.
-                
+
 build-type:     Custom
 
 extra-source-files: include/jni.h,
@@ -257,6 +257,8 @@ Executable j2hs
     build-depends:  base >= 4.5 && < 5
                     , java-bridge
 
+    default-extensions: FlexibleContexts
+
     if flag(ONLY_CORE)
         buildable: False
     else
@@ -289,6 +291,8 @@ Executable h2js
 
     build-depends:  base >= 4.5 && < 5
                     , java-bridge
+
+    default-extensions: FlexibleContexts
 
     if flag(ONLY_CORE)
         buildable: False

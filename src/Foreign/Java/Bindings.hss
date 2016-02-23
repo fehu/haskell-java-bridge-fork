@@ -21,7 +21,6 @@ module Foreign.Java.Bindings (
   ) where
 
 import Foreign.Java
-import Foreign.Java.Utils
 import qualified Foreign.Java.Bindings.JavaSE6
 
 import Foreign.Java.Bindings.JavaTypes

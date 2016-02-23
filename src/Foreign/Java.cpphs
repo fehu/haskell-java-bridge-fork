@@ -136,6 +136,8 @@ module Foreign.Java (
 
   ) where
 
+import Prelude hiding ((<$))
+
 import Control.Exception
 import Control.Monad.State hiding (void)
 import qualified Control.Monad.State as State
@@ -338,7 +340,7 @@ instance JavaArray (A e) (Maybe (JArray e)) where
 
                 return $ Just $ JArray length ptr
             Nothing -> return Nothing
-        
+
     write arr ix arg = do
         let set = _set "set" jvmSetL (\s v -> s { jvmSetL = v }) (object "java.lang.Object")
         case arg of
@@ -399,7 +401,7 @@ newObjectX clazz = do
                              else Unsafe.getConstructorID) vm p csig
         free csig
         return cptr
-    
+
     if ptr == nullPtr
     then return $ fail "no default constructor"
     else do
@@ -1072,7 +1074,7 @@ returnArray ptr = if ptr == nullPtr
 -- >     getSystemClassLoader <- classLoader `bindStaticMethod` "getSystemClassLoader"
 -- >         ::= object "java.lang.ClassLoader"
 -- >     (Just systemClassLoader) <- getSystemClassLoader
--- > 
+-- >
 -- >     loadClass <- classLoader `bindMethod` "loadClass"
 -- >         ::= string --> boolean --> object "java.lang.Class"
 -- >     (Just clazz) <- loadClass systemClassLoader "java.awt.EventQueue" False
@@ -1110,7 +1112,7 @@ isInstanceOf :: JObject -> JClass -> Java Bool
 isInstanceOf (JObject objectPtr) (JClass classPtr) = do
     vm <- getVM
     safe <- getSafe
-    
+
     let isInstanceOf = if safe then JNI.isInstanceOf
                                else JNI.isInstanceOf
 

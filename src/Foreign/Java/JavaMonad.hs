@@ -2,6 +2,7 @@
     , GeneralizedNewtypeDeriving
     , DeriveDataTypeable
     , CPP
+    , FlexibleContexts
  #-}
 {-# OPTIONS
     -Wall
@@ -144,7 +145,7 @@ newJVMState vm = JVMState {
 -- Use one of 'runJava' or 'runJava'' to perform operations in the
 -- Java monad.
 newtype Java a = Java { _runJava :: StateT JVMState IO a }
-    deriving (Monad, MonadState JVMState, Functor, MonadIO)
+    deriving (Applicative, Monad, MonadState JVMState, Functor, MonadIO)
 
 -- | INTERNAL Retrieve the 'jvmPtr' from this Java Monads
 -- State.
@@ -233,7 +234,7 @@ runJava' opts f = do
                             libjvmPath <- JNI.getLibjvmPath >>= peekCString
                             throw $ JvmException libjvmPath opts
                      else return ()
-     
+
     (result, _) <- finally (runStateT (_runJava f) (newJVMState vm))
                            (JNI.destroyVM vm)
 

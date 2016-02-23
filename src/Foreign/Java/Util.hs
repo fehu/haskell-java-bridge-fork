@@ -5,7 +5,7 @@ module Foreign.Java.Util (
         tr, ($>), (<$), breakLast, trace, debug
     ) where
 
-
+import Prelude hiding ((<$))
 import qualified Debug.Trace as Debug
 
 

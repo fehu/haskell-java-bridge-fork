@@ -49,7 +49,7 @@ pkgModDecl info classes = ""
 
 
 -- Modules and Boot files
-  
+
 classBootExports :: Map String JavaClass -> JavaClass -> String
 classBootExports info clazz = ""
 
@@ -155,7 +155,7 @@ classModDecl info clazz = concatMap methodDecl $ zip methodNames methods
                 JObj n   -> "toObjectResult"
                 JArr c   -> "toArrayResult"
 
-        
+
 
 mkMethodNames :: [JavaMethod] -> [String]
 mkMethodNames = concatMap (zipWith (flip (++)) (iterate (++"'") ""))
