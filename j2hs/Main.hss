@@ -35,8 +35,11 @@ data Flag = Help
           | OnlyReflect
           | Filtered
           | Verbose
+
           | Classes [String]
-          | JustJava
+          | Prefixes [String]
+          | ProjectName String
+          | ProjectVersion String
 
 -- | The Command line options as fed to the GetOpt parser.
 options = [
@@ -70,17 +73,29 @@ options = [
     Option "t" ["target-directory"] (ReqArg TargetDirectory "")
         "The target directory for generated source files.",
 
-    Option "n" ["names"] (ReqArg readClasses "")
+
+
+    Option "C" ["classes"] (ReqArg readClasses "")
         "Add classes by full names.",
 
-    Option "J" ["just-java"] (NoArg JustJava)
-        "Only java packages"
+    Option "J" ["just-java"] (NoArg (Prefixes ["java"]))
+        "Translate only java packages",
+
+    Option "p" ["prefixes"] (ReqArg readPrefixes "")
+        "The package prefixes to translate.",
+
+    Option "n" ["name"] (ReqArg ProjectName "")
+        "Set bindings project name.",
+
+    Option "y" ["project-version"](ReqArg ProjectVersion "")
+        "Set bindings project version."
 
  ] where
     readPackages = Packages . splitOneOf ":;,"
     readClasspath = Classpath . splitOneOf ":;,"
     readSearchDepth = SearchDepth . read
     readClasses = Classes . splitOneOf ":;,"
+    readPrefixes = Prefixes . splitOneOf ":;,"
 
 parseArgs :: IO (Either (Options, [String]) [String])
 -- ^ Parse command line arguments with the help of the GetOpt library.
@@ -103,8 +118,11 @@ parseArgs = do
             Packages pkgs     -> opts `set` optPackages        := pkgs
             SearchDepth d     -> opts `set` optSearchDepth     := d
             TargetDirectory t -> opts `set` optTargetDirectory := t
+
             Classes names     -> opts `set` optClassNames      := names
-            JustJava          -> opts `set` optJustJava        := True
+            Prefixes ps       -> opts `set` optPrefixes        := ps
+            ProjectName n     -> opts `set` optProjectName     := n
+            ProjectVersion v  -> opts `set` optProjectVersion  := v
 
 main :: IO ()
 -- ^ main: parseArgs and either 'run' or show errors.
@@ -125,15 +143,14 @@ run opts args
 
     | opts `get` optShowVersion = putStrLn versionInfo
     | opts `get` optCompleteSE6 = j2hs opts $
-             if opts `get` optFiltered then filter minimal classes
-        else if opts `get` optJustJava then filter justJava classes
-                                       else classes
+        if opts `get` optFiltered then filter minimal classes
+                                  else filter justPrefixes classes
 
     | otherwise = getProgName >>= \progName -> putStr """
         No command given. Use `#{progName} -h' for help.
         """
   where
-    justJava = ("java" `isPrefixOf`)
+    justPrefixes p = any (`isPrefixOf` p) (opts `get` optPrefixes)
     minimal name = pkg `elem` (opts `get` optPackages)
         where (pkg, _) = splitClassName name
     classes = javaClassesSE6 ++ (opts `get` optClassNames)

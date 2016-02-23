@@ -27,5 +27,6 @@ record' "Options"
     `has` "optCabalProject"     := True
     `has` "optClassNames"       := ([] :: [String])
     `has` "optJustJava"         := False
+    `has` "optPrefixes"         := ["java"]
 
 
