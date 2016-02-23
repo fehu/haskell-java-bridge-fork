@@ -35,6 +35,8 @@ data Flag = Help
           | OnlyReflect
           | Filtered
           | Verbose
+          | Classes [String]
+          | JustJava
 
 -- | The Command line options as fed to the GetOpt parser.
 options = [
@@ -66,12 +68,19 @@ options = [
         "Only translate a subset of the Java SE.",
 
     Option "t" ["target-directory"] (ReqArg TargetDirectory "")
-        "The target directory for generated source files."
+        "The target directory for generated source files.",
+
+    Option "n" ["names"] (ReqArg readClasses "")
+        "Add classes by full names.",
+
+    Option "J" ["just-java"] (NoArg JustJava)
+        "Only java packages"
 
  ] where
     readPackages = Packages . splitOneOf ":;,"
     readClasspath = Classpath . splitOneOf ":;,"
     readSearchDepth = SearchDepth . read
+    readClasses = Classes . splitOneOf ":;,"
 
 parseArgs :: IO (Either (Options, [String]) [String])
 -- ^ Parse command line arguments with the help of the GetOpt library.
@@ -94,6 +103,8 @@ parseArgs = do
             Packages pkgs     -> opts `set` optPackages        := pkgs
             SearchDepth d     -> opts `set` optSearchDepth     := d
             TargetDirectory t -> opts `set` optTargetDirectory := t
+            Classes names     -> opts `set` optClassNames      := names
+            JustJava          -> opts `set` optJustJava        := True
 
 main :: IO ()
 -- ^ main: parseArgs and either 'run' or show errors.
@@ -113,9 +124,10 @@ run opts args
             """ options)
 
     | opts `get` optShowVersion = putStrLn versionInfo
-    | opts `get` optCompleteSE6 =
-        if opts `get` optFiltered then j2hs opts (filter minimal  javaClassesSE6)
-                                  else j2hs opts (filter justJava javaClassesSE6)
+    | opts `get` optCompleteSE6 = j2hs opts $
+             if opts `get` optFiltered then filter minimal classes
+        else if opts `get` optJustJava then filter justJava classes
+                                       else classes
 
     | otherwise = getProgName >>= \progName -> putStr """
         No command given. Use `#{progName} -h' for help.
@@ -124,5 +136,6 @@ run opts args
     justJava = ("java" `isPrefixOf`)
     minimal name = pkg `elem` (opts `get` optPackages)
         where (pkg, _) = splitClassName name
+    classes = javaClassesSE6 ++ (opts `get` optClassNames)
 
 

@@ -25,5 +25,7 @@ record' "Options"
     `has` "optProjectName"      := "java-bindings"
     `has` "optProjectVersion"   := "1.0"
     `has` "optCabalProject"     := True
+    `has` "optClassNames"       := ([] :: [String])
+    `has` "optJustJava"         := False
 
 
