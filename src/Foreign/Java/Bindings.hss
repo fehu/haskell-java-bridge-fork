@@ -1,0 +1,221 @@
+{-# LANGUAGE Haskell2010 #-}
+{-# OPTIONS -Wall #-}
+
+-- | Functions for generating glue code between Haskell and Java.
+module Foreign.Java.Bindings (
+
+    -- * Create Haskell glue code from Java definitions
+    printJavaPackageModule,
+    printJavaClassModule,
+    printJavaClassBootfile,
+    printJavaClassModule',
+    printJavaClassBootfile',
+
+    -- * Reflect Java classes
+    reflectJavaClasses,
+    findJavaClasses,
+
+    -- ** A priori known information about Java
+    javaClassesSE6
+
+  ) where
+
+import Foreign.Java
+import Foreign.Java.Utils
+import qualified Foreign.Java.Bindings.JavaSE6
+
+import Foreign.Java.Bindings.JavaTypes
+import qualified Foreign.Java.Bindings.Java2Haskell as Java2Haskell
+import qualified Foreign.Java.Bindings.ReflectJava  as ReflectJava
+
+import Foreign.Java.Bindings.HaskellTypes
+import qualified Foreign.Java.Bindings.Haskell2Java   as Haskell2Java
+import qualified Foreign.Java.Bindings.ReflectHaskell as ReflectHaskell
+
+import Data.Word
+
+import Data.Map (Map)
+import qualified Data.List as List
+import qualified Data.Map  as Map
+
+
+javaClassesSE6 :: [String]
+-- ^ The names of all Java Classes part of Java SE 6.
+javaClassesSE6 = Foreign.Java.Bindings.JavaSE6.javaClassesSE6
+
+imports :: String
+-- ^ Imports of all auto generated java code files.
+imports  = """
+    import qualified Foreign.Java as JNI
+    import Foreign.Java ((-->))
+    import qualified Prelude as Prelude
+    import Prelude ((.), ($), (>>=), (>>), return)
+    import qualified Foreign.Java.Bindings.Support as JNIS
+    import Data.Functor ((<$>))
+    """
+
+classInfoSignature :: String
+-- ^ 
+classInfoSignature = "Prelude.String"
+
+classInfo' :: JavaClass -> String
+-- ^ 
+classInfo' clazz = className clazz
+
+packageInfo' packageName classes = packageName
+
+printJavaPackageModule :: String      -- The Java package name
+                       -> String      -- The Haskell module name of the Java package
+                       -> Map String JavaClass -- Info about all other classes
+                       -> [JavaClass] -- The Java classes contained in the Java package
+                       -> String
+-- ^ 
+printJavaPackageModule packageName modName classInfo classes = """
+    {-# LANGUAGE Haskell2010 #-}
+    -- | Package @#{packageName}@
+    module #{modName} (
+    #{moduleExports}\
+        info'
+    ) where
+    #{imports}
+    #{moduleImports}
+    -- Information about this package.
+    info' = #{show $ packageInfo' packageName classes}
+    #{moduleDeclarations}
+    """
+  where moduleDeclarations   = Java2Haskell.pkgModDecl     classInfo classes
+        moduleImports        = Java2Haskell.pkgModImports  classInfo classes
+        moduleExports        = Java2Haskell.pkgModExports  classInfo classes
+
+
+printJavaClassModule :: JavaClass -- The Java class
+                     -> String    -- The Haskell module name of the Java class
+                     -> Map String JavaClass -- Info about all classes
+                     -> String
+-- ^ 
+printJavaClassModule clazz modName classInfo = """
+    {-# LANGUAGE Haskell2010 #-}
+    -- | #{show $ classType clazz} @#{classFullName clazz}@
+    module #{modName} (
+    #{moduleExports}\
+        -- * Information about this class.
+        info'
+    ) where
+    #{imports}
+    #{bootfileImports}
+    #{moduleImports}
+    info' = #{show $ classInfo' clazz}
+    #{bootfileDeclarations}
+    #{moduleDeclarations}
+    """
+  where bootfileDeclarations = Java2Haskell.classBootDecl    classInfo clazz
+        bootfileImports      = Java2Haskell.classBootImports classInfo clazz
+        moduleDeclarations   = Java2Haskell.classModDecl     classInfo clazz
+        moduleImports        = Java2Haskell.classModImports  classInfo clazz
+        moduleExports        = Java2Haskell.classModExports  classInfo clazz
+
+
+printJavaClassBootfile :: JavaClass -- The Java class
+                       -> String    -- The Haskell module name of the Java class
+                       -> Map String JavaClass -- Info about all classes
+                       -> String
+-- ^ 
+printJavaClassBootfile clazz modName classInfo = """
+    {-# LANGUAGE Haskell2010 #-}
+    -- Bootfile for class #{className clazz}
+    module #{modName} (
+    #{bootfileExports}\
+        info'
+    ) where
+    #{imports}
+    #{bootfileImports}
+    info' :: #{classInfoSignature}
+    #{bootfileDeclarations}
+    """
+  where bootfileDeclarations = Java2Haskell.classBootDecl    classInfo clazz
+        bootfileImports      = Java2Haskell.classBootImports classInfo clazz
+        bootfileExports      = Java2Haskell.classBootExports classInfo clazz
+
+
+printJavaClassModule' :: JavaClass -- The Java class
+                      -> String    -- The Haskell module name of the Java class
+                      -> Map String JavaClass -- Info about all classes
+                      -> String
+-- ^ 
+printJavaClassModule' clazz modName classInfo = """
+    {-# LANGUAGE Haskell2010, TypeFamilies #-}
+    -- hidden @#{className clazz}@
+    module #{modName}__ (
+    #{moduleExports}\
+        info'
+    ) where
+    #{imports}
+    #{bootfileImports}
+    #{moduleImports}
+    info' = #{show $ classInfo' clazz}
+    #{bootfileDeclarations}
+    #{moduleDeclarations}
+    """
+  where bootfileDeclarations = Java2Haskell.classBootDecl'    classInfo clazz
+        bootfileImports      = Java2Haskell.classBootImports' classInfo clazz
+        moduleDeclarations   = Java2Haskell.classModDecl'     classInfo clazz
+        moduleImports        = Java2Haskell.classModImports'  classInfo clazz
+        moduleExports        = Java2Haskell.classModExports'  classInfo clazz
+
+
+printJavaClassBootfile' :: JavaClass -- The Java class
+                        -> String    -- The Haskell module name of the Java class
+                        -> Map String JavaClass -- Info about all classes
+                        -> String
+-- ^ 
+printJavaClassBootfile' clazz modName classInfo = """
+    {-# LANGUAGE Haskell2010 #-}
+    -- hidden Bootfile for class #{className clazz}
+    module #{modName}__ (
+    #{bootfileExports}\
+        info'
+    ) where
+    #{imports}
+    #{bootfileImports}
+    info' :: #{classInfoSignature}
+    #{bootfileDeclarations}
+    """
+  where bootfileDeclarations = Java2Haskell.classBootDecl'    classInfo clazz
+        bootfileImports      = Java2Haskell.classBootImports' classInfo clazz
+        bootfileExports      = Java2Haskell.classBootExports' classInfo clazz
+
+
+reflectJavaClasses :: [String]
+                   -> Java [JavaClass]
+-- ^ Retrieve information about the given Java classes
+-- from the Java Virtual Machine.
+reflectJavaClasses = ReflectJava.reflectClasses
+
+
+findJavaClasses :: Word32 -- Maximum depth for following dependencies.
+                -> [String]
+                -> Java [String]
+-- ^ Find all classes that the given classes depend on.
+--
+-- In order to provide proper bindings for a class, bindings
+-- for all classes which a class depends on need to exist too.
+-- A class depends on all classes which it inherits from or
+-- which are used as arguments, return types, or parameters.
+--
+-- This functions returns all the class names of the classes
+-- on which the given classes depend on. No duplicates are
+-- reported and the resulting list is sorted.
+findJavaClasses = ReflectJava.findClasses
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,228 @@
+{-# LANGUAGE Haskell2010
+ #-}
+{-# OPTIONS
+    -Wall
+    -fno-warn-missing-signatures
+    -fno-warn-name-shadowing
+ #-}
+
+{- | The @j2hs@ command - create Haskell bindings for Java classes.
+    
+-}
+module Java2Haskell where
+
+import Prelude hiding (print)
+
+import Options
+--import Common
+
+import Foreign.Java
+import Foreign.Java.Bindings
+import Foreign.Java.Bindings.JavaTypes
+import Foreign.Java.Utils
+import Foreign.Java.IO
+
+import Data.NamedRecord
+import qualified Data.List as L
+import Data.Strings
+
+import Data.Generics
+
+import qualified Data.Map as Map
+import qualified Data.Set as Set
+import qualified Data.MultiMap as MultiMap
+import qualified Data.Bimap as Bimap
+
+import Control.Monad
+
+import System.Directory
+import System.FilePath
+import System.IO hiding (print)
+import System.Exit
+
+
+-- Following 20 lines: Functions for managing a Bimap
+-- such that it works with case insensitive string.
+--
+-- TODO: Factor this out `plus` use the case-insensitive package.
+--       Those functions x... should be made into their own
+--       datatype (Something like CISBimap or
+--       BimapWithGenericComparisonFunction or ...)
+
+newtype CaseInsensitiveString = CIS String
+
+instance Eq CaseInsensitiveString where
+    (CIS a) == (CIS b) = strToLower a == strToLower b
+
+instance Ord CaseInsensitiveString where
+    (CIS a) <= (CIS b) = strToLower a <= strToLower b
+
+xToString (CIS s) = s
+
+xEmpty      = Bimap.empty
+xInsert k v = Bimap.insert (CIS k) (CIS v)
+xMemberR k  = Bimap.memberR (CIS k)
+xGet m      = xToString . (Bimap.!) m . CIS
+xFromList   = Bimap.fromList . map (\(a, b) -> (CIS a, CIS b))
+xToList     = map (\(a, b) -> (xToString a, xToString b)) . Bimap.toList
+xKeysR      = map xToString . Bimap.keysR
+xKeys       = map xToString . Bimap.keys
+xSize       = Bimap.size
+
+-- end todo
+
+
+ifVerbose opts = when (opts `get` optVerbose) . liftIO . putStr
+
+j2hs :: Options -> [String] -> IO ()
+j2hs opts args = do
+
+    classpath <- mapM canonicalizePath $ opts `get` optClasspath
+    targetDir <- return (opts `get` optTargetDirectory)
+
+    let classpath' = concat $ L.intersperse ":" classpath
+        indent     = ("  " ++)
+
+    ifVerbose opts """
+        Classpath:
+        #{concatMap (\x -> "  " ++ x ++ "\n") (classpath)}"""
+    print "Initializing JVM..."
+    initJava ["""-Djava.class.path=#{classpath'}"""]
+    println " Done."
+    
+    unless (null args) $ runJava $ do
+        io $ do
+            ifVerbose opts """
+                Target Directory:
+                  #{targetDir}
+                """
+            createDirectoryIfMissing True targetDir
+            setCurrentDirectory targetDir
+            
+        ifVerbose opts """
+            Looking for Java classes:
+            #{concatMap (\x -> "  " ++ x ++ "\n") args}"""
+
+        -- Gather all classes that need to be translated
+        print "Looking up classes..."
+        classes  <- findJavaClasses (opts `get` optSearchDepth) args
+
+        println """ #{show $ length classes} found."""
+        ifVerbose opts $
+            unlines (map indent classes)
+
+        -- Calculate the Haskell module names for packages and classes
+        let packages = Set.toList $ Set.fromList
+                     $ map (maybe "" id . takePackageName) classes
+
+            -- temporary class names
+            classModules_ = foldr (uncurry g) xEmpty $ map f classes
+              where f x = (x, makeClassModuleName x)
+                    g clazzName modName all = xInsert clazzName newName all
+                      where newName = head $ dropWhile (`xMemberR` all)
+                                           $ iterate (++ "_") modName
+
+            -- package names.
+            -- This func keeps in mind that package names must not clash with class names.
+            packageModules = foldr (uncurry g) xEmpty $ map f packages
+              where f x = (x, makePackageModuleName x)
+                    g pkgName modName all = xInsert pkgName newName all
+                      where newName = head $ dropWhile (\n -> n `xMemberR` classModules_
+                                                           || n `xMemberR` all)
+                                           $ iterate (++ "Package") modName
+
+            -- finally the class names.
+            -- This func keeps in mind that the package names might have been augmented
+            -- before. i.e. the package java.awt.image will be Java.Awt.ImagePackage now,
+            -- thus all classes inside the package have their full name changed too.
+            classModules = Map.fromList $ map f $ xToList classModules_
+              where f (clazzName, moduleName)
+                        = (clazzName, joinClassName (newPackageName, classModuleName))
+                      where classModuleName = takeClassName moduleName
+                            packageName = maybe "" id $ takePackageName clazzName
+                            newPackageName = packageModules `xGet` packageName
+
+            -- A mapping form packages to classes
+            classesByPackage = MultiMap.fromList
+                             $ map (\clazz -> (fst $ splitClassName clazz, clazz)) classes
+
+            -- A list of all modules
+            allModules = xKeysR packageModules ++ Map.elems classModules
+
+            -- The list of hidden modules
+            hiddenModules = map (++ "__") $ Map.elems classModules
+
+        -- Gather information about classes via Reflection
+        print """Gathering refection information..."""
+        let classNames = Map.keys classModules
+            updName name clazz = (name, clazz { classModName = classModules Map.! name })
+        classInfo <- Map.fromList `fmap` map (uncurry updName)
+                                  `fmap` zip classNames
+                                  `fmap` everywhere (mkT (\(TyVar v) -> TyVar ('_':v)))
+                                  `fmap` reflectJavaClasses classNames
+        println " Done."
+
+        when (opts `get` optOnlyReflect) $ io $ do
+            mapM_ println $ Map.elems classInfo
+            exitSuccess
+
+        println """Generating modules for #{show $ Map.size classModules} classes in \
+                   #{show $ xSize packageModules} packages..."""
+
+        -- Create all the package files.
+        -- These contain the Java classes as Haskell types.
+        forM_ (xToList packageModules) $ \(packageName, packageMod) -> do
+            let dirName = strJoin [pathSeparator] (strSplitAll "." packageMod)
+
+            -- Create the directory for the package
+            io $ do 
+                createDirectoryIfMissing True dirName
+
+                let classes = map (classInfo Map.!)
+                                  (MultiMap.lookup packageName classesByPackage)
+
+                -- Create the Haskell module file for the Java package
+                file <- openFile (dirName ++ ".hs") WriteMode
+                hPutStrLn file
+                  $ printJavaPackageModule packageName packageMod classInfo classes
+                hClose file
+
+        -- Create all the class files.
+        -- These contain the java methods as Haskell functions.
+        forM_ (Map.toList classModules) $ \(clazzName, clazzMod) -> do
+            let fileName = strJoin [pathSeparator] (strSplitAll "." clazzMod)
+                clazz = classInfo Map.! clazzName
+
+            io $ do
+                -- Create the Haskell module file for the Java class.
+                file <- openFile (fileName ++ ".hs") WriteMode
+                hPutStrLn file $ printJavaClassModule clazz clazzMod classInfo
+                hClose file
+
+                -- Create the *hidden* Haskell module file for the Java class.
+                file <- openFile (fileName ++ "__.hs") WriteMode
+                hPutStrLn file $ printJavaClassModule' clazz clazzMod classInfo
+                hClose file
+
+        -- write Cabal file
+        when (opts `get` optCabalProject) $ io $ do
+            cabalFile <- openFile ((opts `get` optProjectName) ++ ".cabal") WriteMode
+            hPutStrLn cabalFile """
+                name:           #{opts `get` optProjectName}
+                version:        #{opts `get` optProjectVersion}
+                cabal-version:  >= 1.8
+                build-type:     Simple
+                
+                Library {
+                 build-depends:
+                  base >= 4 && < 5,
+                  java-bridge
+                 exposed-modules:
+                  #{strJoin ",\n  " allModules}
+                 other-modules:
+                  #{strJoin ",\n  " hiddenModules} }
+                """
+            hClose cabalFile
+
+    return ()
+

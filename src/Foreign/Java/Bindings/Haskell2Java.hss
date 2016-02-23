@@ -1,0 +1,7 @@
+{-# LANGUAGE Haskell2010
+ #-}
+
+module Foreign.Java.Bindings.Haskell2Java where
+
+
+
