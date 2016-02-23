@@ -106,10 +106,10 @@ run opts args
         progName <- getProgName
         putStrLn (usageInfo """
             #{versionInfo}
-            
+
             Usage: #{progName} [options] command [files...]
-            
-            Use `#{progName} help' for information about commands.
+
+            Use `#{progName} -h' for information about commands.
             """ options)
 
     | opts `get` optShowVersion = putStrLn versionInfo
@@ -118,7 +118,7 @@ run opts args
                                   else j2hs opts (filter justJava javaClassesSE6)
 
     | otherwise = getProgName >>= \progName -> putStr """
-        No command given. Use `#{progName} help' for help.
+        No command given. Use `#{progName} -h' for help.
         """
   where
     justJava = ("java" `isPrefixOf`)
