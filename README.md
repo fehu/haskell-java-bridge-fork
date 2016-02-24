@@ -1,5 +1,8 @@
 java-bridge fork
 ===========
+The original package at [hackage](https://hackage.haskell.org/package/java-bridge).
+-----
+
 
 Fixes for GHC 7.10.3
 
