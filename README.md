@@ -5,7 +5,7 @@ The original package at [hackage](https://hackage.haskell.org/package/java-bridg
 -----
 
 
-Fixes for GHC 7.10.3
+* Fixes to compile with GHC 7.10.3.
 
 * Some new options added for `j2hs`.
 
