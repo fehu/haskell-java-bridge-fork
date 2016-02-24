@@ -234,8 +234,11 @@ classBootDecl' info clazz
           where parentClass = info Map.! parent
                 modName = classModName parentClass
                 qualifiedName = modName ++ "__." ++ (tyclTName $ takeClassName modName)
-        enumConstants = concat $ List.intersperse " | " $ map sanitize $ map snd $ classEnumConstants clazz
+        enumConstants = concat $ List.intersperse " | "
+                      $ map (addPrefix . sanitize) $ map snd $ classEnumConstants clazz
           where sanitize (x:xs) = Char.toUpper x : xs
+                addPrefix = (++) (cName ++ "_")
+                cName = filter Char.isAlphaNum $ className clazz
 
 
 classModDecl' :: Map String JavaClass -> JavaClass -> String
