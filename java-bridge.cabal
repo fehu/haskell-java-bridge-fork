@@ -197,7 +197,7 @@ Library
                             -- the following are part of the Haskell Platform
                             , mtl >= 2.1.1
                             , syb >= 0.3.6.1
-                            , transformers >= 0.3
+                            , transformers >= 0.3 && < 0.5
                             , containers >= 0.4.2.1
 
         other-modules:      Foreign.Java.Types
